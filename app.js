@@ -1,191 +1,122 @@
-'use strict';
+'use strict'
 
+import * as PIXI from './lib/pixi.mjs'
+import { canvasWidth, canvasHeight, app } from './manager.js'
+import { particles, generateParticles, maxParticles, } from './particles.js'
+import { applyForceAllToOne, red, green, blue, redredPullForce} from './forces.js'
 
-import * as PIXI from './node_modules/pixi.js/dist/pixi.mjs'
-import { Container } from './node_modules/pixi.js/dist/pixi.mjs'
+const fpsDiv = document.querySelector('#fps')
+let framesPerSecond = 0
 
-
-const canvasWidth = 1000;
-const canvasHeight = 700;
-const maxParticles = 500;
-const colors = ['red', 'green', 'blue'];
-const forceConstant = 10; 
-const colorForceRange = 100;
-const universalPushForceRange = 30;
-const fpsDiv = document.querySelector('#fps');
-let framesPerSecond = 0;
-let particles = [];
-
-let app = new PIXI.Application({ width: canvasWidth, height: canvasHeight });
-document.body.appendChild(app.view);
 app.ticker.add(gameLoop)
 
+generateParticles(red, maxParticles)
+generateParticles(green, maxParticles)
+generateParticles(blue, maxParticles)
+requestAnimationFrame(gameLoop)
+setInterval(measureFps, 1000)
 
-function createCircle (particle) { 
-    const circle  = new PIXI.Graphics();
-    circle.beginFill(particle.color);
-    circle.drawCircle(particle.x, particle.y, particle.r);
-    circle.endFill();
-    return circle;
+function noLightCircleLines(particle) {
+  particle.pixiCircle.forceCircle.tint = 'white'
 }
 
-generateParticles('red');
-generateParticles('green');
-//generateParticles('blue')
-requestAnimationFrame(gameLoop);
-setInterval(measureFps, 1000);
-
-function generateParticles(color) {
-    let numP = 0;
-    while (numP < maxParticles) {
-        let particle = {
-            x: Math.random() * canvasWidth,
-            y: Math.random() * canvasHeight,
-            r: 4,
-            vx: 0,
-            vy: 0,
-            color: color,
-        };
-        const container = new Container();
-        app.stage.addChild(container)
-        particle.container = container;
-        
-        const pixiCircle = createCircle(particle);
-        particle.pixiCircle = pixiCircle;
-        container.addChild(pixiCircle);
-
-        const forceCircle = createUniversalForceCircle(particle)
-        particle.pixiCircle.forceCircle = forceCircle;
-        container.addChild(forceCircle);
-
-        const pixiCircleColorForce = drawColorForce(particle)
-        particle.pixiCircle.pixiCircleColorForce = pixiCircleColorForce
-        container.addChild(pixiCircleColorForce);
-
-        particles.push(particle);
-
-        numP += 1;
-    }
+function lightCircleLines(particle) {
+  particle.pixiCircle.forceCircle.tint = 'blue'
 }
 
 function gameLoop() {
-    framesPerSecond += 1;
-    
-    particles.forEach(renderPixiParticle);
-    particles.forEach(moveParticle);
-    
-    particles.forEach(applyForceAllToOne);
-    particles.forEach(reflection);
+  framesPerSecond += 1
+
+  particles.forEach(renderPixiParticle)
+  particles.forEach(moveParticle)
+
+  particles.forEach(applyForceAllToOne)
+ particles.forEach(handleScreenEdgeCollision)
 }
 
-function renderPixiParticle (particle) {
-    particle.container.x = particle.x;
-    particle.container.y = particle.y;
+function renderPixiParticle(particle) {
+  particle.pixiCircle.x = particle.x
+  particle.pixiCircle.y = particle.y
 }
 
 function measureFps() {
-    fpsDiv.innerHTML = 'fps: ' + framesPerSecond;
-    framesPerSecond = 0;
+  fpsDiv.innerHTML = 'fps: ' + framesPerSecond
+  framesPerSecond = 0
 }
 
-function createUniversalForceCircle(particle) {
-    const forceCircle  = new PIXI.Graphics();
-    forceCircle.lineStyle(2, particle.color);
-    forceCircle.drawCircle(particle.x, particle.y, universalPushForceRange/2);
-    forceCircle.endFill();
-    return forceCircle
-}
 
 function drawColorForce(particle) {
-    const forceCircle  = new PIXI.Graphics();
-    forceCircle.lineStyle(0.5, particle.color);
-    forceCircle.drawCircle(particle.x, particle.y, colorForceRange/2);
-    forceCircle.endFill();
-    return forceCircle
+  const forceCircle = new PIXI.Graphics()
+  forceCircle.lineStyle(0.5, particle.color)
+  forceCircle.drawCircle(particle.x, particle.y, colorForceRange / 2)
+  forceCircle.endFill()
+  return forceCircle
 }
 
-
-function moveParticle (particle) {
-    particle.x += particle.vx;
-    particle.y += particle.vy;
+function moveParticle(particle) {
+  particle.x += particle.vx
+  particle.y += particle.vy
 }
 
-function reflection (particle) {
-    if (particle.x < 0) {
-        particle.x = canvasWidth + particle.x
-    }
-    if (particle.x > canvasWidth) {
-        particle.x = 0 
-    }
-    if (particle.y < 0) {
-        particle.y = canvasHeight + particle.y
-    }
-    if (particle.y > canvasHeight) {
-        particle.y = 0 
-    }
+function handleScreenEdgeCollision(particle) {
+  const r = Math.ceil(particle.pixiCircle.width);
+  // right edge
+  if (particle.x > canvasWidth + r) {
+    particle.x = 0 - r
+  }
+
+  // bottom edge
+  if (particle.y > canvasHeight + r) {
+    particle.y = 0 - r
+  }
+  
+  // left edge
+  if (particle.x < 0 - r) {
+    particle.x = canvasWidth + r
+  }
+
+  // top edge
+  if (particle.y < 0 - r) {
+    particle.y = canvasHeight + r
+  }
 }
 
-function applyForceAllToOne (particle) {
-    particles.forEach(applyForce);
-
-    function applyForce (otherParticle) {
-        if (otherParticle === particle) return;
-        
-        const distX = particle.x - otherParticle.x;
-        const distY = particle.y - otherParticle.y;
-        const dist = Math.sqrt(distX * distX + distY * distY);
-
-        if (dist < universalPushForceRange) {
-            universalPush(particle, otherParticle, 0.6);
-        } else if (dist < colorForceRange) {
-            pull('red', 'red', 0.1, otherParticle);
-            pull('red', 'green', 1, otherParticle);
-        }    
-    }
-
-    function universalPush(particle, otherParticle, sila) {
-        const distX = particle.x - otherParticle.x;
-        const distY = particle.y - otherParticle.y;
-        const dist = Math.sqrt(distX * distX + distY * distY);
-
-        const xDirection = distX / dist;
-        const yDirection = distY / dist;
-        const force = forceConstant / dist * sila/2;
-        const forceX = xDirection * force;
-        const forceY = yDirection * force;
-        const frictionConstant = 0.9;
-        particle.vx = (particle.vx + forceX) * frictionConstant;
-        particle.vy = (particle.vy + forceY) * frictionConstant;
-    }
-
-    function push(color1, color2, sila, otherParticle) {
-        if (otherParticle.color === color1 && particle.color === color2) {
-            applyColorForce(particle, otherParticle, +sila);
-        }
-    }
-
-    function pull(color1, color2, sila, otherParticle) {
-        if (otherParticle.color === color1 && particle.color === color2) {
-            applyColorForce(particle, otherParticle, -sila);
-        }
-    }
-
-    function applyColorForce(particle, otherParticle, sila) {
-        const distX = particle.x - otherParticle.x;
-        const distY = particle.y - otherParticle.y;
-        const dist = Math.sqrt(distX * distX + distY * distY);
-
-        if (dist > colorForceRange) return;
-
-        const xDirection = distX / dist;
-        const yDirection = distY / dist;
-        const force = forceConstant / dist * sila;
-        const forceX = xDirection * force;
-        const forceY = yDirection * force;
-
-        const frictionConstant = 0.9;
-        particle.vx = (particle.vx + forceX) * frictionConstant;
-        particle.vy = (particle.vy + forceY) * frictionConstant;
-
-    }
+function sliderOption() {
+  var slider = document.getElementById('myRange')
+  slider.value = maxParticles
+  var output = document.getElementById('demo')
+  output.innerHTML = slider.value // Display the default slider value
+  // Update the current slider value (each time you drag the slider handle)
+  slider.oninput = function () {
+    deleteAllParticles()
+    generateParticles(red, this.value)
+    generateParticles(green, this.value)
+    generateParticles(blue, this.value)
+    output.innerHTML = this.value
+  }
 }
+
+function deleteAllParticles() {
+  particles.forEach(deleteParticle)
+  particles = []
+}
+
+function deleteParticle(particle) {
+  app.stage.removeChild(particle.pixiCircle)
+  particle.pixiCircle.destroy()
+}
+
+//sliderOption()
+
+function forceSlider() {
+  var slider = document.getElementById('forceRange')
+  slider.value = redredPullForce
+  var output = document.getElementById('demo2')
+  output.innerHTML = slider.value // Display the default slider value
+  // Update the current slider value (each time you drag the slider handle)
+  slider.oninput = function () {
+    output.innerHTML = this.value
+    redredPullForce = this.value
+  }
+}
+//forceSlider()
